@@ -429,7 +429,7 @@ export default function DashboardPage() {
               {projects.map((proj) => (
                 <Link
                   key={proj.id}
-                  href={`/projects/${proj.id}`}
+                  href={`/projects/?id=${proj.id}`}
                   className="group rounded-xl glass-panel glass-panel-hover p-5 flex flex-col justify-between h-44 shadow-sm"
                 >
                   <div className="space-y-2">
