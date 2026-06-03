@@ -1,4 +1,4 @@
-请帮我从零构建一个名为 "Nexus" 的专业级 AI 协作项目管理平台。该系统采用前后端分离架构，前端使用 Next.js 16 + TypeScript，后端使用 Python FastAPI，数据库与认证直接集成本地或云端 Supabase。
+请帮我从零构建一个名为 "Nexus" 的专业级 AI 协作项目管理平台。该系统采用前后端分离架构，前端使用 Next.js 16 + TypeScript，后端使用 Python FastAPI，数据库与认证直接集成本地或云端 Supabase。项目所有的前端界面设计、提示信息、全局通知、弹窗表单以及后端的 AI 智能分析报告都必须使用中文。
 
 以下是该项目的具体规格和架构要求：
 
@@ -27,7 +27,7 @@
 ---
 
 ### 3. 前端功能与页面设计 (Next.js)
-实现具有现代极简高级感 UI 的以下页面：
+实现具有现代极简高级感且界面语言全中文化的以下页面：
 1. **Landing 首页 (/)**：现代风格的产品介绍、功能特性展示、开始使用入口。
 2. **登录与注册 (/login & /signup)**：
    - 注册时自动收集姓名，调用 Supabase 注册，并引导至 Dashboard。
@@ -54,9 +54,9 @@
 2. **LLM 客户端与 Demo 降级 (app/services/llm.py)**：
    - 默认支持调用 OpenAI 兼容端点（如 OpenAI, xAI Grok, Together, Ollama 本地模型）。
    - 编写 `is_demo_mode` 属性：如果检测到 API 密钥为空，或者是占位符（如 `sk-...`、`xai-...` 等），则自动标记为演示模式。
-   - 在演示模式下，直接返回写好的精美 Demo 洞察报告（包含 markdown 格式的项目摘要、任务优先级排序、风险提示等），而不是报错。
+   - 在演示模式下，直接返回写好的中文精美 Demo 洞察报告（包含 markdown 格式的项目摘要、任务优先级排序、风险提示等），而不是报错。
 3. **AI 路由 (app/api/routes/ai.py)**：
-   - 暴露 `POST /ai/insights` 接口，接收前端提交的当前项目与任务的快照（Snapshot），构建 System Prompt 和 User Prompt，调用大模型分析。
+   - 暴露 `POST /ai/insights` 接口，接收前端提交的当前项目与任务的快照（Snapshot），构建 System Prompt 和 User Prompt，调用大模型使用中文分析。
    - 返回统一的 `InsightResponse`，包含生成的 Content、模型名称、以及是否为 Demo 模式的标志。
 
 ---
