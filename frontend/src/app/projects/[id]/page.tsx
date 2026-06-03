@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { 
-  ArrowLeft, Sparkles, Plus, Trash2, Check, ArrowRight, ArrowLeftSquare, 
-  Loader2, User, Calendar, AlertTriangle, Lightbulb, Play, CheckCircle2, ShieldAlert
+  ArrowLeft, Sparkles, Plus, Trash2, 
+  Loader2, User, Calendar, ShieldAlert
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,13 +46,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // Realtime ref for RLS DELETE workaround
+  // 内存 Ref 用于 Supabase Realtime 删除事件过滤
   const tasksRef = useRef<Task[]>([]);
   useEffect(() => {
     tasksRef.current = tasks;
   }, [tasks]);
 
-  // Modals state
+  // 看板弹窗状态
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -61,15 +61,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
 
-  // AI insights state
+  // AI 智能分析报告状态
   const [showInsights, setShowInsights] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightReport, setInsightReport] = useState<any>(null);
 
-  // Load project details, tasks, and members profiles
+  // 加载数据
   const loadData = useCallback(async () => {
     try {
-      // 1. Load project info
+      // 1. 获取项目基本情况
       const { data: projData, error: projError } = await supabase
         .from("projects")
         .select("*")
@@ -79,7 +79,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       if (projError) throw projError;
       setProject(projData);
 
-      // 2. Load tasks in this project
+      // 2. 获取所属项目下的全部任务卡片
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select("*")
@@ -89,7 +89,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
 
-      // 3. Load active workspace members profiles for assignee dropdown
+      // 3. 加载成员列表以便指派
       const { data: workspaceMembers, error: membersError } = await supabase
         .from("workspace_members")
         .select("user_id")
@@ -104,7 +104,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         setProfiles(profilesData || []);
       }
     } catch (err: any) {
-      toast.error("Failed to load project details.");
+      toast.error("获取项目看板详情失败。");
       console.error(err);
       router.push("/dashboard");
     } finally {
@@ -112,7 +112,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }, [projectId, router]);
 
-  // Auth checker
+  // 会话检查
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -125,18 +125,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     checkUser();
   }, [router]);
 
-  // Load project data
   useEffect(() => {
     if (user) {
       loadData();
     }
   }, [user, loadData]);
 
-  // Realtime subscription setup
+  // 实时通道侦听配置
   useEffect(() => {
     if (!projectId) return;
 
-    // Subscribes without project-level filter to capture DELETE updates cleanly under RLS rules
     const channel = supabase
       .channel("project-kanban-channel")
       .on(
@@ -158,12 +156,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
               );
             } else {
-              // Removed from project
               setTasks((prev) => prev.filter((t) => t.id !== updatedTask.id));
             }
           } else if (payload.eventType === "DELETE") {
             const deletedId = payload.old.id;
-            // Check in-memory tasksRef to verify if deleted item belongs to current UI state
+            // 采用内存比对，规避 Postgres RLS DELETE 不传递 project_id 的缺陷
             const existsInCurrent = tasksRef.current.some((t) => t.id === deletedId);
             if (existsInCurrent) {
               setTasks((prev) => prev.filter((t) => t.id !== deletedId));
@@ -178,7 +175,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     };
   }, [projectId]);
 
-  // Update task status transition
+  // 卡片横向状态扭转迁移
   const handleTransition = async (taskId: string, currentStatus: string, direction: "next" | "prev") => {
     let nextStatus: "todo" | "doing" | "done" = "todo";
     if (direction === "next") {
@@ -188,7 +185,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
 
     try {
-      // Optimistic Update
+      // 乐观更新 UI
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, status: nextStatus } : t))
       );
@@ -200,22 +197,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       if (error) throw error;
       
-      // Trigger instant refresh
       await loadData();
     } catch (err: any) {
-      toast.error("Failed to transition task status.");
-      // Rollback to original state on error
+      toast.error("扭转卡片交付状态失败。");
       loadData();
     }
   };
 
-  // Delete task action
+  // 删除任务
   const handleDeleteTask = async (taskId: string) => {
-    const confirm = window.confirm("Are you sure you want to delete this task?");
+    const confirm = window.confirm("您确认要彻底删除这个任务卡片吗？此操作无法撤销。");
     if (!confirm) return;
 
     try {
-      // Optimistic Update
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
       const { error } = await supabase
@@ -224,14 +218,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         .eq("id", taskId);
 
       if (error) throw error;
-      toast.success("Task deleted.");
+      toast.success("任务卡片已彻底移除。");
     } catch (err: any) {
-      toast.error("Failed to delete task.");
+      toast.error("删除任务卡片异常。");
       loadData();
     }
   };
 
-  // Create Task action
+  // 新增任务
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim() || !user) return;
@@ -253,7 +247,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       if (error) throw error;
 
-      toast.success("Task added to Kanban Board.");
+      toast.success("工作事项已成功添加至待办列表。");
       setShowTaskModal(false);
       setNewTaskTitle("");
       setNewTaskDesc("");
@@ -261,16 +255,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setNewTaskAssignee("");
       setNewTaskDueDate("");
       
-      // Reload page state
       await loadData();
     } catch (err: any) {
-      toast.error(err.message || "Failed to add task.");
+      toast.error(err.message || "添加任务画布失败。");
     } finally {
       setCreatingTask(false);
     }
   };
 
-  // AI Insights Generation call
+  // 触发 AI 分析报告生成
   const triggerAIInsights = async () => {
     if (!project) return;
     setInsightsLoading(true);
@@ -301,13 +294,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned error status ${response.status}`);
+        throw new Error(`FastAPI 服务返回异常状态码 ${response.status}`);
       }
 
       const report = await response.json();
       setInsightReport(report);
     } catch (err: any) {
-      toast.error("Failed to load AI Insights. Please check if backend service is running.");
+      toast.error("未能获取 AI 看板分析，请检查后端 FastAPI 进程是否正常监听。");
       setShowInsights(false);
       console.error(err);
     } finally {
@@ -315,7 +308,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   };
 
-  // Helper to parse basic markdown format into JSX/HTML safely
+  // 渲染简易 Markdown 元素为 HTML
   const renderMarkdown = (markdown: string) => {
     if (!markdown) return "";
     let html = markdown
@@ -323,28 +316,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    // Blockquotes
     html = html.replace(/^\s*>\s*(.*)$/gm, '<blockquote class="border-l-2 border-violet-500 pl-3.5 py-0.5 my-3 bg-violet-500/5 text-slate-300 italic font-light">$1</blockquote>');
-
-    // Headers
     html = html.replace(/^\s*###\s+(.*)$/gm, '<h4 class="text-xs font-bold text-violet-400 mt-4 mb-2 uppercase tracking-wide flex items-center gap-1.5">⚡ $1</h4>');
     html = html.replace(/^\s*##\s+(.*)$/gm, '<h3 class="text-sm font-bold text-white border-b border-white/5 pb-1 mt-5 mb-3">$1</h3>');
     html = html.replace(/^\s*#\s+(.*)$/gm, '<h2 class="text-base font-extrabold text-transparent bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text mt-6 mb-4">$1</h2>');
-
-    // Lists
     html = html.replace(/^\s*[-*+]\s+(.*)$/gm, '<li class="ml-4 list-disc text-slate-300 text-xs my-1 leading-relaxed">$1</li>');
-
-    // Bold & italic
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-100">$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>');
-
-    // Code blocks
     html = html.replace(/`(.*?)`/g, '<code class="bg-white/10 px-1 py-0.5 rounded text-fuchsia-400 font-mono text-[10px]">$1</code>');
-
-    // Horizontal separator
     html = html.replace(/^\s*---\s*$/gm, '<hr class="border-white/5 my-4" />');
-
-    // Line breaks
     html = html.replace(/\n\n/g, "</p><p class='text-xs text-slate-400 my-2 leading-relaxed'>");
 
     return <div dangerouslySetInnerHTML={{ __html: `<p class='text-xs text-slate-400 my-2 leading-relaxed'>${html}</p>` }} />;
@@ -354,12 +334,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="min-h-screen bg-[#030014] flex flex-col items-center justify-center gap-3 text-slate-300">
         <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
-        <span className="text-sm font-light">Loading Kanban Board...</span>
+        <span className="text-sm font-light">正在拉取看板卡片信息...</span>
       </div>
     );
   }
 
-  // Filter tasks into columns
   const todoTasks = tasks.filter((t) => t.status === "todo");
   const doingTasks = tasks.filter((t) => t.status === "doing");
   const doneTasks = tasks.filter((t) => t.status === "done");
@@ -367,10 +346,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="min-h-screen bg-[#030014] text-slate-100 flex flex-col font-sans relative">
       
-      {/* Background radial highlight */}
+      {/* 极光背景 */}
       <div className="absolute top-0 right-1/4 w-[400px] h-[150px] bg-violet-600/5 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Main Header bar */}
+      {/* 顶部标题与控制 */}
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 h-16 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-4">
           <Link 
@@ -381,49 +360,49 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </Link>
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight">{project?.name}</h2>
-            <p className="text-[10px] text-slate-400 font-light">Kanban Board</p>
+            <p className="text-[10px] text-slate-400 font-light">敏捷协作看板</p>
           </div>
         </div>
 
-        {/* AI Insight Trigger & Add Task */}
+        {/* AI 项目分析报告与新建任务 */}
         <div className="flex items-center gap-3">
           <button
             onClick={triggerAIInsights}
             className="h-9 px-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium flex items-center gap-2 text-violet-300 hover:text-violet-200 transition-all cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            AI Smart Insights
+            AI 智能项目诊断
           </button>
           <button
             onClick={() => setShowTaskModal(true)}
             className="h-9 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-violet-500/10 cursor-pointer transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add Task
+            新建任务
           </button>
         </div>
       </header>
 
-      {/* Kanban Board Container */}
+      {/* 看板主面 */}
       <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 py-8 flex flex-col gap-6">
         
-        {/* Project Context Summary */}
+        {/* 看板项目背景说明 */}
         <div className="p-4 rounded-xl glass-panel text-slate-300 flex flex-col gap-1.5 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Project Context</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">项目背景画布</h3>
           <p className="text-xs font-light leading-relaxed">
-            {project?.description || "No project overview description provided. Click 'Add Task' to assign items or 'AI Smart Insights' to request snapshot diagnostics."}
+            {project?.description || "未指派看板背景说明。您可以点击“新建任务”增设待跟进卡片，或点击“AI 智能项目诊断”进行看板健康度排查。"}
           </p>
         </div>
 
-        {/* 3-Column Kanban Grid */}
+        {/* 3-Column 看板栅格 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 items-start">
           
-          {/* Column 1: TODO */}
+          {/* 列 1: 待处理 */}
           <div className="flex flex-col rounded-xl glass-panel p-4 gap-4 bg-slate-950/20 border border-white/5">
             <div className="flex items-center justify-between border-b border-white/5 pb-2">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-violet-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">To Do</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">待处理 (Todo)</h3>
               </div>
               <span className="bg-white/5 text-slate-300 px-2 py-0.5 rounded-full text-[10px] font-semibold">
                 {todoTasks.length}
@@ -436,18 +415,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ))}
               {todoTasks.length === 0 && (
                 <div className="flex-1 border border-dashed border-white/5 rounded-xl flex items-center justify-center p-8 text-center text-slate-500 text-xs font-light">
-                  No pending tasks
+                  暂无积压待开发事项
                 </div>
               )}
             </div>
           </div>
 
-          {/* Column 2: IN PROGRESS */}
+          {/* 列 2: 进行中 */}
           <div className="flex flex-col rounded-xl glass-panel p-4 gap-4 bg-slate-950/20 border border-white/5">
             <div className="flex items-center justify-between border-b border-white/5 pb-2">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-fuchsia-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">In Progress</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">进行中 (Doing)</h3>
               </div>
               <span className="bg-white/5 text-slate-300 px-2 py-0.5 rounded-full text-[10px] font-semibold">
                 {doingTasks.length}
@@ -460,18 +439,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ))}
               {doingTasks.length === 0 && (
                 <div className="flex-1 border border-dashed border-white/5 rounded-xl flex items-center justify-center p-8 text-center text-slate-500 text-xs font-light">
-                  No active tasks
+                  无进行中的研发事项
                 </div>
               )}
             </div>
           </div>
 
-          {/* Column 3: DONE */}
+          {/* 列 3: 已完成 */}
           <div className="flex flex-col rounded-xl glass-panel p-4 gap-4 bg-slate-950/20 border border-white/5">
             <div className="flex items-center justify-between border-b border-white/5 pb-2">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Done</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">已完成 (Done)</h3>
               </div>
               <span className="bg-white/5 text-slate-300 px-2 py-0.5 rounded-full text-[10px] font-semibold">
                 {doneTasks.length}
@@ -484,7 +463,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ))}
               {doneTasks.length === 0 && (
                 <div className="flex-1 border border-dashed border-white/5 rounded-xl flex items-center justify-center p-8 text-center text-slate-500 text-xs font-light">
-                  No completed tasks
+                  暂无已完成的事项
                 </div>
               )}
             </div>
@@ -494,19 +473,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       </main>
 
-      {/* ADD TASK MODAL */}
+      {/* 创建任务弹窗 */}
       {showTaskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl glass-panel glow-border p-6 shadow-2xl animate-in fade-in-50 zoom-in-95 duration-200">
-            <h3 className="text-base font-bold text-white tracking-tight mb-2">Add Kanban Task</h3>
-            <p className="text-slate-400 text-xs mb-5 font-light">Add a card containing a single backlog requirement.</p>
+            <h3 className="text-base font-bold text-white tracking-tight mb-2">在看板中增设任务</h3>
+            <p className="text-slate-400 text-xs mb-5 font-light">新建一个需要团队成员执行的项目卡片。</p>
 
             <form onSubmit={handleCreateTask} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Task Title</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">任务名称</label>
                 <input
                   type="text"
-                  placeholder="e.g. Implement login logic"
+                  placeholder="例如：开发第三方认证登录逻辑"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
                   className="w-full h-10 px-4 rounded-lg glass-input text-xs"
@@ -515,9 +494,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Description</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">任务说明</label>
                 <textarea
-                  placeholder="Details about task execution, mock params, or expectations..."
+                  placeholder="详细列出开发所需入参、具体预期效果等..."
                   value={newTaskDesc}
                   onChange={(e) => setNewTaskDesc(e.target.value)}
                   className="w-full h-20 px-4 py-2 rounded-lg glass-input text-xs resize-none"
@@ -526,26 +505,26 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Priority</label>
+                  <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">优先级</label>
                   <select
                     value={newTaskPriority}
                     onChange={(e: any) => setNewTaskPriority(e.target.value)}
                     className="w-full h-10 px-3 rounded-lg glass-input text-xs bg-[#0b0726] cursor-pointer"
                   >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Assignee</label>
+                  <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">执行人</label>
                   <select
                     value={newTaskAssignee}
                     onChange={(e) => setNewTaskAssignee(e.target.value)}
                     className="w-full h-10 px-3 rounded-lg glass-input text-xs bg-[#0b0726] cursor-pointer"
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">未指派人员</option>
                     {profiles.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.full_name}
@@ -556,7 +535,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Due Date</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">截止日期</label>
                 <input
                   type="date"
                   value={newTaskDueDate}
@@ -571,14 +550,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   onClick={() => setShowTaskModal(false)}
                   className="h-9 px-4 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition-colors cursor-pointer"
                 >
-                  Cancel
+                  取消
                 </button>
                 <button
                   type="submit"
                   disabled={creatingTask}
                   className="h-9 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  {creatingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Add Task"}
+                  {creatingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "新建任务"}
                 </button>
               </div>
             </form>
@@ -586,20 +565,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      {/* AI INSIGHTS DRAWER (RIGHT PANEL) */}
+      {/* AI 诊断抽屉式侧面板 */}
       {showInsights && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-lg h-full bg-[#0b0726]/90 border-l border-white/5 p-6 flex flex-col justify-between shadow-2xl relative animate-in slide-in-from-right duration-300">
             
             <div className="flex flex-col gap-6 overflow-y-auto flex-1 pb-6">
               
-              {/* Drawer Header */}
+              {/* 抽屉头部 */}
               <div className="flex items-center justify-between border-b border-white/5 pb-4">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-violet-400 animate-pulse" />
                   <div>
-                    <h3 className="text-sm font-bold text-white tracking-tight">AI Workspace Insights</h3>
-                    <p className="text-[10px] text-slate-400 font-light">Powered by FastAPI Analytical Hub</p>
+                    <h3 className="text-sm font-bold text-white tracking-tight">AI 看板智能诊断报告</h3>
+                    <p className="text-[10px] text-slate-400 font-light">由 Python FastAPI 智能分析引擎驱动</p>
                   </div>
                 </div>
                 <button
@@ -610,38 +589,38 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 </button>
               </div>
 
-              {/* Insights content loading or display */}
+              {/* 内容加载或展示 */}
               {insightsLoading ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
                   <Loader2 className="w-7 h-7 animate-spin text-violet-500" />
-                  <span className="text-xs font-light">FastAPI analyzing task snapshot...</span>
+                  <span className="text-xs font-light">FastAPI 正在加载任务快照评估中...</span>
                 </div>
               ) : insightReport ? (
                 <div className="space-y-4">
-                  {/* Demo indicator block */}
+                  {/* 本地 Demo 提示块 */}
                   {insightReport.is_demo && (
                     <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 flex gap-2.5 items-start">
                       <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                       <div className="text-[10px] leading-relaxed">
-                        <span className="font-semibold block">Demo Mode Enabled</span>
-                        The API key is currently unset or contains a placeholder. Showing local model evaluation snapshot.
+                        <span className="font-semibold block">本地演示降级模式已激活</span>
+                        检测到未配置有效的 LLM API 密钥。系统已为您自动生成高保真的静态快照分析。
                       </div>
                     </div>
                   )}
 
-                  {/* Generated Markdown content rendered */}
+                  {/* 诊断正文 */}
                   <div className="prose prose-invert prose-xs max-w-none text-slate-300">
                     {renderMarkdown(insightReport.content)}
                   </div>
 
                   <div className="border-t border-white/5 pt-4 text-[10px] text-slate-500 flex justify-between">
-                    <span>Engine: {insightReport.model}</span>
-                    <span>Status: Analyzed</span>
+                    <span>诊断引擎: {insightReport.model}</span>
+                    <span>诊断状态：已完成</span>
                   </div>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center gap-2 py-20 text-slate-500 text-xs font-light">
-                  No insights report generated.
+                  未生成任何诊断分析。
                 </div>
               )}
 
@@ -652,7 +631,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 onClick={() => setShowInsights(false)}
                 className="h-9 px-5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium cursor-pointer transition-colors"
               >
-                Close Insights
+                关闭报告
               </button>
             </div>
 
@@ -664,7 +643,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   );
 }
 
-// INNER CARD COMPONENT FOR TASK DISPLAY
+// 任务卡片内部组件
 function TaskCard({ 
   task, 
   profiles, 
@@ -676,9 +655,8 @@ function TaskCard({
   onTransition: (id: string, status: string, dir: "next" | "prev") => void; 
   onDelete: (id: string) => void;
 }) {
-  const assigneeName = profiles.find((p) => p.id === task.assignee_id)?.full_name || "Unassigned";
+  const assigneeName = profiles.find((p) => p.id === task.assignee_id)?.full_name || "未指派";
 
-  // Priority color scheme styles
   const getPriorityStyle = (priority: string) => {
     switch (priority) {
       case "high":
@@ -690,32 +668,40 @@ function TaskCard({
     }
   };
 
+  const getPriorityLabel = (priority: string) => {
+    switch (priority) {
+      case "high": return "高";
+      case "low": return "低";
+      default: return "中";
+    }
+  };
+
   return (
     <div className="group p-4 rounded-xl bg-white/5 border border-white/5 hover:border-violet-500/30 transition-all duration-200 shadow-sm flex flex-col gap-3">
       
-      {/* Top badges */}
+      {/* 顶部标签 */}
       <div className="flex items-center justify-between">
         <span className={`text-[9px] font-semibold uppercase px-2 py-0.5 rounded tracking-wider ${getPriorityStyle(task.priority)}`}>
-          {task.priority}
+          {getPriorityLabel(task.priority)}优先级
         </span>
         <button
           onClick={() => onDelete(task.id)}
           className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 rounded hover:bg-white/5 transition-all cursor-pointer"
-          title="Delete Task"
+          title="删除任务"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Task Content */}
+      {/* 任务内容 */}
       <div className="space-y-1">
         <h4 className="text-xs font-bold text-white leading-snug">{task.title}</h4>
         <p className="text-[10px] text-slate-400 line-clamp-3 leading-relaxed font-light">
-          {task.description || "No description provided."}
+          {task.description || "无任何工作说明。"}
         </p>
       </div>
 
-      {/* Date & Assignee Details */}
+      {/* 执行人与截至排期 */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5 text-[9px] text-slate-500">
         <div className="flex items-center gap-1">
           <User className="w-3 h-3 text-slate-500" />
@@ -730,13 +716,13 @@ function TaskCard({
         )}
       </div>
 
-      {/* Kanban Navigation Controls */}
+      {/* 看板向左向右扭转按钮 */}
       <div className="flex items-center justify-end gap-1.5 pt-1">
         {task.status !== "todo" && (
           <button
             onClick={() => onTransition(task.id, task.status, "prev")}
             className="w-5 h-5 rounded flex items-center justify-center bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer text-xs"
-            title="Move Backward"
+            title="向左移动"
           >
             ‹
           </button>
@@ -745,7 +731,7 @@ function TaskCard({
           <button
             onClick={() => onTransition(task.id, task.status, "next")}
             className="w-5 h-5 rounded flex items-center justify-center bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer text-xs"
-            title="Move Forward"
+            title="向右移动"
           >
             ›
           </button>

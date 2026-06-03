@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { 
-  Sparkles, Plus, Kanban, LayoutGrid, CheckCircle2, 
-  Settings, LogOut, ArrowRight, Loader2, FolderKanban,
+  Sparkles, Plus, LayoutGrid, CheckCircle2, 
+  LogOut, ArrowRight, Loader2, FolderKanban,
   Building, User, Compass, Briefcase, FileText
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,28 +32,28 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Workspace state
+  // 工作空间状态
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [newWsName, setNewWsName] = useState("");
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
 
-  // Projects state
+  // 项目状态
   const [projects, setProjects] = useState<Project[]>([]);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [newProjName, setNewProjName] = useState("");
   const [newProjDesc, setNewProjDesc] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
 
-  // Statistics state
+  // 数据看板状态
   const [stats, setStats] = useState({
     activeProjects: 0,
     doingTasks: 0,
     totalTasks: 0,
   });
 
-  // Verify auth session
+  // 验证会话
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -66,10 +66,9 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
-  // Fetch workspaces list
+  // 加载工作空间列表
   const loadWorkspaces = useCallback(async (userId: string, email: string) => {
     try {
-      // 1. Fetch workspaces through workspace_members relation
       const { data: memberships, error: memError } = await supabase
         .from("workspace_members")
         .select("workspace_id, workspaces(id, name, slug)");
@@ -83,16 +82,14 @@ export default function DashboardPage() {
       setWorkspaces(wsList);
 
       if (wsList.length > 0) {
-        // If an active workspace isn't set, default to first one
         if (!activeWorkspace) {
           setActiveWorkspace(wsList[0]);
         } else {
-          // If active workspace is still in the new list, keep it, otherwise reset
           const exists = wsList.find(w => w.id === activeWorkspace.id);
           if (!exists) setActiveWorkspace(wsList[0]);
         }
       } else {
-        // If no workspaces found, trigger auto-provisioning
+        // 无工作空间时自动生成默认空间
         const defaultId = await ensureDefaultWorkspace(userId, email);
         const { data: wsData } = await supabase
           .from("workspaces")
@@ -105,16 +102,15 @@ export default function DashboardPage() {
         }
       }
     } catch (err: any) {
-      toast.error("Failed to load workspaces.");
+      toast.error("加载工作空间列表异常。");
       console.error(err);
     }
   }, [activeWorkspace]);
 
-  // Load project details and calculate stats
+  // 加载项目列表与统计指标
   const loadWorkspaceDetails = useCallback(async () => {
     if (!activeWorkspace) return;
     try {
-      // Load projects
       const { data: projData, error: projError } = await supabase
         .from("projects")
         .select("*")
@@ -126,7 +122,6 @@ export default function DashboardPage() {
 
       const activeProjCount = (projData || []).filter(p => p.status === "active").length;
 
-      // Load tasks to calculate statistics
       let doingCount = 0;
       let totalCount = 0;
 
@@ -151,14 +146,13 @@ export default function DashboardPage() {
         totalTasks: totalCount,
       });
     } catch (err: any) {
-      toast.error("Failed to update workspace statistics.");
+      toast.error("更新工作空间看板统计指标失败。");
       console.error(err);
     } finally {
       setLoading(false);
     }
   }, [activeWorkspace]);
 
-  // Reload everything when user or active workspace changes
   useEffect(() => {
     if (user) {
       loadWorkspaces(user.id, user.email || "");
@@ -169,13 +163,13 @@ export default function DashboardPage() {
     if (activeWorkspace) {
       loadWorkspaceDetails();
     } else if (workspaces.length === 0 && !loading) {
-      // Still loading
+      // 保持加载状态
     } else {
       setLoading(false);
     }
   }, [activeWorkspace, workspaces, loadWorkspaceDetails, loading]);
 
-  // Create Workspace action
+  // 创建工作空间
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWsName.trim() || !user) return;
@@ -205,21 +199,20 @@ export default function DashboardPage() {
 
       if (memberError) throw memberError;
 
-      toast.success("Workspace created successfully!");
+      toast.success("工作空间创建成功！");
       setNewWsName("");
       setShowWorkspaceModal(false);
       
-      // Update workspaces and set active
       setWorkspaces(prev => [...prev, newWs]);
       setActiveWorkspace(newWs);
     } catch (err: any) {
-      toast.error(err.message || "Failed to create workspace.");
+      toast.error(err.message || "创建工作空间失败。");
     } finally {
       setCreatingWorkspace(false);
     }
   };
 
-  // Create Project action
+  // 创建项目
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjName.trim() || !activeWorkspace || !user) return;
@@ -240,33 +233,32 @@ export default function DashboardPage() {
 
       if (projError) throw projError;
 
-      toast.success("Project created successfully!");
+      toast.success("新项目画布创建成功！");
       setNewProjName("");
       setNewProjDesc("");
       setShowProjectModal(false);
       
-      // Refresh project list
       setProjects(prev => [newProj, ...prev]);
       setStats(prev => ({
         ...prev,
         activeProjects: prev.activeProjects + 1
       }));
     } catch (err: any) {
-      toast.error(err.message || "Failed to create project.");
+      toast.error(err.message || "创建项目画布失败。");
     } finally {
       setCreatingProject(false);
     }
   };
 
-  // Handle Logout
+  // 退出登录
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      toast.success("Logged out successfully.");
+      toast.success("账户已安全登出。");
       router.push("/login");
     } catch (err: any) {
-      toast.error(err.message || "Logout failed.");
+      toast.error(err.message || "退出登录异常。");
     }
   };
 
@@ -274,7 +266,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-[#030014] flex flex-col items-center justify-center gap-3 text-slate-300">
         <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
-        <span className="text-sm font-light">Loading Nexus Dashboard...</span>
+        <span className="text-sm font-light">正在加载 Nexus 工作台...</span>
       </div>
     );
   }
@@ -282,10 +274,10 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#030014] text-slate-100 flex flex-col font-sans">
       
-      {/* Upper gradient design */}
+      {/* 渐变装饰 */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[150px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
 
-      {/* Header bar */}
+      {/* 导航栏 */}
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 h-16 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-8">
           <Link href="/dashboard" className="flex items-center gap-2 group">
@@ -297,7 +289,7 @@ export default function DashboardPage() {
             </span>
           </Link>
           
-          {/* Workspace selector dropdown in header */}
+          {/* 顶部工作空间下拉选择器 */}
           {activeWorkspace && (
             <div className="flex items-center gap-2.5">
               <span className="text-slate-600">/</span>
@@ -327,7 +319,7 @@ export default function DashboardPage() {
               <button 
                 onClick={() => setShowWorkspaceModal(true)}
                 className="w-6 h-6 rounded-md bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-                title="Create Workspace"
+                title="新建工作空间"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -335,7 +327,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* User Profile / Logout */}
+        {/* 账户状态及退出 */}
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/5 rounded-full px-3 py-1 text-xs text-slate-300">
             <User className="w-3.5 h-3.5 text-violet-400" />
@@ -344,25 +336,25 @@ export default function DashboardPage() {
           <button 
             onClick={handleLogout}
             className="w-9 h-9 rounded-lg bg-white/5 hover:bg-red-500/10 hover:text-red-400 border border-white/5 flex items-center justify-center text-slate-400 transition-all cursor-pointer"
-            title="Sign Out"
+            title="退出登录"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* 主面板内容 */}
       <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 py-8 flex flex-col gap-8">
         
-        {/* Workspace Title bar */}
+        {/* 空间标题与操作 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              {activeWorkspace?.name || "Workspace Dashboard"}
+            <h1 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
+              {activeWorkspace?.name || "工作空间仪表盘"}
             </h1>
             <p className="text-slate-400 text-xs mt-1 font-light flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5 text-violet-400" />
-              Manage your workspace operations, track KPIs, and review active boards.
+              管理当前工作空间下的所有敏捷项目，追踪进行中的指标，对齐研发链路。
             </p>
           </div>
           
@@ -371,17 +363,16 @@ export default function DashboardPage() {
             className="h-10 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-semibold px-5 rounded-lg flex items-center gap-2 shadow-md shadow-violet-500/10 cursor-pointer self-start sm:self-center transition-all duration-200"
           >
             <Plus className="w-4 h-4" />
-            New Project
+            新建项目
           </button>
         </div>
 
-        {/* Statistics Cards Grid */}
+        {/* 统计指标卡片 */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           
-          {/* Card 1 */}
           <div className="glass-panel p-5 rounded-xl flex items-center justify-between shadow-sm">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Active Projects</span>
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">活跃项目总数</span>
               <span className="text-2xl font-bold text-white tracking-tight">{stats.activeProjects}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400">
@@ -389,10 +380,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 2 */}
           <div className="glass-panel p-5 rounded-xl flex items-center justify-between shadow-sm">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Tasks in Progress</span>
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">开发中任务</span>
               <span className="text-2xl font-bold text-white tracking-tight">{stats.doingTasks}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/20 flex items-center justify-center text-fuchsia-400">
@@ -400,10 +390,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 3 */}
           <div className="glass-panel p-5 rounded-xl flex items-center justify-between shadow-sm">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Total Tasks</span>
+              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">累计任务指标</span>
               <span className="text-2xl font-bold text-white tracking-tight">{stats.totalTasks}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400">
@@ -413,26 +402,26 @@ export default function DashboardPage() {
 
         </section>
 
-        {/* Projects Listing */}
+        {/* 看板列表 */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
             <Compass className="w-5 h-5 text-violet-400" />
-            Workspace Boards
+            工作空间项目看板
           </h2>
 
           {projects.length === 0 ? (
             <div className="rounded-xl glass-panel p-12 text-center flex flex-col items-center justify-center gap-4">
               <Briefcase className="w-10 h-10 text-slate-500" />
               <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-white">No projects found</h3>
-                <p className="text-xs text-slate-400 max-w-sm">Create your first collaborative project board in this workspace to get started.</p>
+                <h3 className="text-sm font-semibold text-white">暂无项目看板</h3>
+                <p className="text-xs text-slate-400 max-w-sm">在该空间下创建您的首个敏捷任务画布以开启协作。</p>
               </div>
               <button
                 onClick={() => setShowProjectModal(true)}
                 className="h-9 bg-white/10 hover:bg-white/15 text-white border border-white/10 text-xs px-4 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add First Project
+                创建首个项目
               </button>
             </div>
           ) : (
@@ -445,24 +434,24 @@ export default function DashboardPage() {
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between">
-                      <h3 className="text-base font-bold text-white tracking-tight group-hover:text-violet-400 transition-colors">
+                      <h3 className="text-sm font-bold text-white tracking-tight group-hover:text-violet-400 transition-colors">
                         {proj.name}
                       </h3>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider ${
+                      <span className={`text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider ${
                         proj.status === "active" ? "bg-violet-500/10 text-violet-400 border border-violet-500/20" : "bg-slate-800 text-slate-400"
                       }`}>
-                        {proj.status}
+                        {proj.status === "active" ? "活跃" : proj.status}
                       </span>
                     </div>
                     <p className="text-slate-400 text-xs font-light line-clamp-3 leading-relaxed">
-                      {proj.description || "No project description provided."}
+                      {proj.description || "未对此项目填写任何描述说明。"}
                     </p>
                   </div>
                   
                   <div className="flex justify-between items-center pt-4 border-t border-white/5 text-[10px] text-slate-500">
-                    <span>Created: {new Date(proj.created_at).toLocaleDateString()}</span>
+                    <span>创建日期: {new Date(proj.created_at).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1 text-violet-400 font-medium group-hover:translate-x-1 transition-transform">
-                      Open Board <ArrowRight className="w-3 h-3" />
+                      进入项目画布 <ArrowRight className="w-3 h-3" />
                     </span>
                   </div>
                 </Link>
@@ -473,21 +462,21 @@ export default function DashboardPage() {
 
       </main>
 
-      {/* CREATE WORKSPACE MODAL */}
+      {/* 创建工作空间弹窗 */}
       {showWorkspaceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl glass-panel glow-border p-6 shadow-2xl animate-in fade-in-50 zoom-in-95 duration-200">
-            <h3 className="text-base font-bold text-white tracking-tight mb-2">Create Workspace</h3>
-            <p className="text-slate-400 text-xs mb-5 font-light">Set up a new space for project groups and tasks.</p>
+            <h3 className="text-base font-bold text-white tracking-tight mb-2">创建新工作空间</h3>
+            <p className="text-slate-400 text-xs mb-5 font-light">为不同的团队或独立项目群开辟一个新的开发与隔离空间。</p>
             
             <form onSubmit={handleCreateWorkspace} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Workspace Name</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">工作空间名称</label>
                 <div className="relative">
                   <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="e.g. Design Team"
+                    placeholder="例如：视觉研发组"
                     value={newWsName}
                     onChange={(e) => setNewWsName(e.target.value)}
                     className="w-full h-10 pl-10 pr-4 rounded-lg glass-input text-xs"
@@ -505,14 +494,14 @@ export default function DashboardPage() {
                   }}
                   className="h-9 px-4 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition-colors cursor-pointer"
                 >
-                  Cancel
+                  取消
                 </button>
                 <button
                   type="submit"
                   disabled={creatingWorkspace}
                   className="h-9 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  {creatingWorkspace ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Create"}
+                  {creatingWorkspace ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "确 认"}
                 </button>
               </div>
             </form>
@@ -520,21 +509,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* CREATE PROJECT MODAL */}
+      {/* 创建项目看板弹窗 */}
       {showProjectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl glass-panel glow-border p-6 shadow-2xl animate-in fade-in-50 zoom-in-95 duration-200">
-            <h3 className="text-base font-bold text-white tracking-tight mb-2">Create New Project</h3>
-            <p className="text-slate-400 text-xs mb-5 font-light">Add a new collaborative Kanban board inside the current workspace.</p>
+            <h3 className="text-base font-bold text-white tracking-tight mb-2">创建新项目看板</h3>
+            <p className="text-slate-400 text-xs mb-5 font-light">在当前选择的工作空间下添加一个全新的协作看板，以便指派研发任务。</p>
             
             <form onSubmit={handleCreateProject} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Project Name</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">项目名称</label>
                 <div className="relative">
                   <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="e.g. Q3 Launch Redesign"
+                    placeholder="例如：Q3 极光官网构建"
                     value={newProjName}
                     onChange={(e) => setNewProjName(e.target.value)}
                     className="w-full h-10 pl-10 pr-4 rounded-lg glass-input text-xs"
@@ -544,11 +533,11 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Description</label>
+                <label className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">描述信息</label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
                   <textarea
-                    placeholder="Describe project deliverables, scope, or context..."
+                    placeholder="简要填写项目周期、开发重点或里程碑说明..."
                     value={newProjDesc}
                     onChange={(e) => setNewProjDesc(e.target.value)}
                     className="w-full h-24 pl-10 pr-4 py-2.5 rounded-lg glass-input text-xs resize-none"
@@ -566,14 +555,14 @@ export default function DashboardPage() {
                   }}
                   className="h-9 px-4 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition-colors cursor-pointer"
                 >
-                  Cancel
+                  取消
                 </button>
                 <button
                   type="submit"
                   disabled={creatingProject}
                   className="h-9 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  {creatingProject ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Create Project"}
+                  {creatingProject ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "新建项目"}
                 </button>
               </div>
             </form>
