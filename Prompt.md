@@ -37,8 +37,8 @@
    - 展示最近参与的项目列表。
    - 列出我加入的全部工作空间。
    - 提供“新建项目”的弹窗或页面（自动关联当前活跃工作空间）。
-4. **项目看板页面 (/projects/[id])**：
-   - 展示项目名称与描述。
+4. **项目看板页面 (/projects/?id=[project_id])**：
+   - 展示项目名称与描述。采用静态路由加查询参数的形式，以支持 `output: "export"` 静态打包要求。
    - **Kanban 看板**：分三列（待办、进行中、已完成）。
    - 提供快速状态迁移按钮，点击即更新状态，并且更新后立刻调用前端 `loadData()` 刷新界面。
    - **实时同步 (Realtime)**：使用 `@supabase/ssr` 订阅 `tasks` 表的变动。由于 `DELETE` 事件在 RLS 开启下可能不携带 `project_id` 列，请在客户端取消 `filter` 过滤，而在内存中比对 `tasksRef.current` 任务的 ID 来触发界面更新。
@@ -61,9 +61,14 @@
 
 ---
 
-### 5. 配置文件样例
+### 5. 配置文件与部署架构样例
 1. **根目录下 `.env.example`**
 2. **frontend 下 `.env.example`**（定义 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`）
 3. **backend 下 `.env.example`**（定义 `SUPABASE_URL` 和 `SUPABASE_SECRET_KEY` 以及 `LLM_API_KEY`）
+4. **根目录下 `cloudbuild.yaml`**（用于配置 GCP 自动化构建与持续部署）
+5. **部署架构要求**：
+   - 前端采用静态 HTML 导出模式 (`output: "export"`, `trailingSlash: true`)，生成静态资源后打包到 FastAPI 的 `app/static` 目录下。
+   - 后端 FastAPI 负责代理所有静态文件访问，并对非 API 路由的 404 错误配置 SPA 降级跳转（重定向至 `index.html` 保证客户端路由能正常刷新）。
+   - 整体使用多阶段构建（Stage 1 编译前端，Stage 2 载入 Python 宿主）打包为单一容器镜像，部署至 GCP Cloud Run。
 
 请按照生产环境标准编写该项目，确保类型安全（TypeScript 无 lint 错误），后端逻辑健壮，数据库设计具备防递归和实时推送的高可用特征。
