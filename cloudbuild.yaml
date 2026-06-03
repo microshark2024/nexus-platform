@@ -1,0 +1,46 @@
+# cloudbuild.yaml
+steps:
+  # 1. Build the unified Docker image with necessary build arguments
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_SUPABASE_URL=$_NEXT_PUBLIC_SUPABASE_URL'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_BACKEND_URL=/'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+      - '.'
+
+  # 2. Push the built image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+
+  # 3. Deploy the container image to Google Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'nexus-platform'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--set-env-vars'
+      - 'SUPABASE_URL=$_SUPABASE_URL,SUPABASE_SECRET_KEY=$_SUPABASE_SECRET_KEY,LLM_API_KEY=$_LLM_API_KEY'
+
+images:
+  - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
