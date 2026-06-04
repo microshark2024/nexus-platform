@@ -65,7 +65,7 @@
 
 ---
 
-### 5. 配置文件与部署架构样例
+### 5. 配置文件与部署架构与故障排查
 1. **根目录下 `.env.example`**
 2. **frontend 下 `.env.example`**（定义 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`）
 3. **backend 下 `.env.example`**（定义 `SUPABASE_URL` 和 `SUPABASE_SECRET_KEY` 以及 `LLM_API_KEY`）
@@ -74,5 +74,14 @@
    - 前端采用静态 HTML 导出模式 (`output: "export"`, `trailingSlash: true`)，生成静态资源后打包到 FastAPI 的 `app/static` 目录下。
    - 后端 FastAPI 负责代理所有静态文件访问，并对非 API 路由的 404 错误配置 SPA 降级跳转（重定向至 `index.html` 保证客户端路由能正常刷新）。
    - 整体使用多阶段构建（Stage 1 编译前端，Stage 2 载入 Python 宿主）打包为单一容器镜像，部署至 GCP Cloud Run。
+
+#### ⚠️ GCP 部署关键避坑与最佳实践：
+* **前端 Node.js 编译版本**：Next.js 16 要求 Node.js 版本 `>=20.9.0`。Dockerfile 中 Stage 1 的前端基础镜像必须指定为 `node:20-alpine` 或者是更高版本（避免使用 `node:18-alpine` 导致构建时抛出版本不匹配异常）。
+* **使用 Artifact Registry 代替已弃用的 GCR**：`gcr.io` 目前对新仓库权限限制严格。最佳实践是将 `cloudbuild.yaml` 中的镜像路径替换为您项目中已开通的 Artifact Registry 专用 Docker 仓库，例如：
+  `us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexus-platform:$COMMIT_SHA`。
+* **Pydantic 启动环境变量校验**：后端 FastAPI 在启动初始化 `config.py` 时会校验 `SUPABASE_PUBLISHABLE_KEY`。在 `cloudbuild.yaml` 部署至 Cloud Run 时，必须在 `--set-env-vars` 中明确传入该环境变量，以防服务启动时因为缺少变量抛出 `ValidationError` 崩溃并报错 `PORT=8080 timeout`。
+* **两种 GitHub 自动化部署方式**：
+  - **方法一：GitHub Actions 触发**：使用 `.github/workflows/gcp-deploy.yml` 捕获 push 动作，通过 Service Account 授权，在 Action 环境下向 GCP 提交 `gcloud builds submit` 构建部署。
+  - **方法二：GCP Cloud Build Trigger 触发**：直接在 GCP 控制台将 GitHub 仓库与 Cloud Build 连接并创建触发器，绑定 `master` 分支推送。将 `_NEXT_PUBLIC_SUPABASE_URL` 等 7 个密钥变量作为**代入变量 (Substitution Variables)**配置在触发器高级设置中。
 
 请按照生产环境标准编写该项目，确保类型安全（TypeScript 无 lint 错误），后端逻辑健壮，数据库设计具备防递归和实时推送的高可用特征。
