@@ -11,14 +11,14 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_BACKEND_URL=/'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexus-platform:$COMMIT_SHA'
       - '.'
 
   # 2. Push the built image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexus-platform:$COMMIT_SHA'
 
   # 3. Deploy the container image to Google Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -28,7 +28,7 @@ steps:
       - 'deploy'
       - 'nexus-platform'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexus-platform:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -37,10 +37,10 @@ steps:
       - '--port'
       - '8080'
       - '--set-env-vars'
-      - 'SUPABASE_URL=$_SUPABASE_URL,SUPABASE_SECRET_KEY=$_SUPABASE_SECRET_KEY,LLM_API_KEY=$_LLM_API_KEY,LLM_API_BASE=$_LLM_API_BASE,LLM_MODEL=$_LLM_MODEL'
+      - 'SUPABASE_URL=$_SUPABASE_URL,SUPABASE_SECRET_KEY=$_SUPABASE_SECRET_KEY,SUPABASE_PUBLISHABLE_KEY=$_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,LLM_API_KEY=$_LLM_API_KEY,LLM_API_BASE=$_LLM_API_BASE,LLM_MODEL=$_LLM_MODEL'
 
 images:
-  - 'gcr.io/$PROJECT_ID/nexus-platform:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexus-platform:$COMMIT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY

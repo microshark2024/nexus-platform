@@ -1,7 +1,7 @@
 # Root Dockerfile for unified deployment of both Frontend and Backend
 
 # --- Stage 1: Build the Next.js Frontend ---
-FROM node:18-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 # Install dependencies
