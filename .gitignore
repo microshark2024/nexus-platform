@@ -96,7 +96,6 @@ venv/
 .venv/
 ENV/
 bin/
-lib/
 include/
 /scratch/
 test_*.py
