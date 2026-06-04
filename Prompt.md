@@ -24,6 +24,10 @@
 - 编写 `SECURITY DEFINER` 的 SQL 辅助函数（如 `is_workspace_member`, `is_workspace_owner`, `can_access_project`）来查询成员资格以打破 Postgres 的 RLS 循环递归。
 - 确保工作空间的 Owner 在 `workspace_members` 还没有记录时也可以进行管理（即允许添加首个成员自己），并允许 Workspace 成员或 Owner 创建项目和任务。
 
+#### 数据库重置与角色特权恢复：
+- 当在云端或本地重置 `public` 架构时（例如执行了 `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`），必须显式重新授予系统角色（`postgres`, `anon`, `authenticated`, `service_role`）对该架构的使用特权。
+- 必须使用 `GRANT ALL` 和 `ALTER DEFAULT PRIVILEGES` 提前为上述系统角色对架构内的所有现有表、序列、函数及未来创建的数据库对象授予全部操作特权。这可以彻底规避 API 请求报权限拒绝错误（`permission denied for table workspaces - Error 42501`），保证前端新注册用户的工作空间自动初始化（Workspace auto-provisioning）流程无缝运行。
+
 ---
 
 ### 3. 前端功能与页面设计 (Next.js)
